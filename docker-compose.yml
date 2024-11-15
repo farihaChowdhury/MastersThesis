@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: timescaledb
+    environment:
+      POSTGRES_DB: testDB
+      POSTGRES_HOST: localhost
+      POSTGRES_USER: fariha 
+      POSTGRES_PASSWORD: fariha
+    ports:
+      - "5433:5432"   
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    networks:
+      - broker-kafka
+
+  pgadmin-test:
+    container_name: pgadmin_thesis
+    image: dpage/pgadmin4:latest
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@gmail.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5051:80"
+    restart: always
+    networks:
+      - broker-kafka
+  
+  kafka:
+    image: wurstmeister/kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092 
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    depends_on:
+      - zookeeper
+    networks:
+      - broker-kafka
+      
+  kafka_producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+    networks:
+      - broker-kafka
+
+  zookeeper:
+    image: wurstmeister/zookeeper
+    ports:
+      - "2181:2181"
+    networks:
+      - broker-kafka
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - timescaledb
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - broker-kafka
+  
+  anomaly_detection:
+    build: .
+    depends_on:
+      - kafka
+      - timescaledb
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+    networks:
+      - broker-kafka
+
+volumes:
+  timescaledb_data:
+  grafana_data:
+
+networks:
+  broker-kafka:
+    driver: bridge
